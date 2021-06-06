@@ -23,9 +23,9 @@ import kotlin.system.exitProcess
 class MyProfileActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMyProfileBinding
     private var auth = FirebaseAuth.getInstance()
-    private var extraProfileImageUri: String=""
     private var db = DatabaseManager()
-    private  var currentUid = auth.uid.toString()
+    private var currentUid = auth.uid.toString()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMyProfileBinding.inflate(layoutInflater)
@@ -35,22 +35,19 @@ class MyProfileActivity : AppCompatActivity() {
 
     private fun init() {
 
-
-
+        // 유저 프로필 세팅
         db.callUserData(currentUid, object : Callback<UserData> {
             override fun onCallback(data: UserData) {
-                if(data != null){
-                    binding.textViewMyProfileName.text = data.userName
-                    binding.textViewMyProfileEmail.text = data.id
-                    binding.textViewMyProfileStudentIdValue.text = data.student_id
-                    binding.textViewMyProfileMajorValue.text = data.major
-                    binding.textViewMyProfileBirthdayValue.text = data.birth
-                    Log.d("data",data.toString())
-                    loadProfileImage(data.userProfileImageUrl)
-                    extraProfileImageUri = data.userProfileImageUrl
-                }
+                binding.textViewMyProfileName.text = data.userName
+                binding.textViewMyProfileEmail.text = data.id
+                binding.textViewMyProfileStudentIdValue.text = data.student_id
+                binding.textViewMyProfileMajorValue.text = data.major
+                binding.textViewMyProfileBirthdayValue.text = data.birth
+                Log.d("로그", "data: $data")
+                loadProfileImage(data.userProfileImageUrl)
             }
         })
+
         // copyright 이동
         binding.textViewMyProfileGoToCopyright.setOnClickListener {
             Intent(this, CopyrightActivity::class.java).also {
@@ -70,77 +67,75 @@ class MyProfileActivity : AppCompatActivity() {
         // AppbarLayout elevation = 0dp
         binding.appLayoutMyProfileAppbarLayout.outlineProvider = null
 
-        binding.textViewMyProfileLogout.setOnClickListener{
+        // 로그아웃 클릭했을 때
+        binding.textViewMyProfileLogout.setOnClickListener {
             auth.signOut()
             finishAffinity()
-            Intent(this,LoginActivity::class.java).also{
+            Intent(this, LoginActivity::class.java).also {
                 startActivity(it)
-                overridePendingTransition(R.anim.activity_slide_in, R.anim.activity_slide_out)
                 exitProcess(0)
             }
         }
+
         // toolbar appbar로 지정
         setSupportActionBar(binding.toolbarMyProfileToolbar)
 
         // 뒤로 가기 눌렀을 때
-        binding.toolbarMyProfileToolbar.setNavigationOnClickListener {
-            finish()
+        binding.toolbarMyProfileToolbar.setNavigationOnClickListener { finish() }
+
+        // 프로필 이미지 클릭했을 때
+        binding.imageViewMyProfileProfileImg.setOnClickListener {
+            Intent(this, EditProfileActivity::class.java).also {
+                startActivityForResult(it, 2000)
+            }
+            overridePendingTransition(R.anim.activity_slide_in, R.anim.activity_slide_out)
         }
     }
+
+
     private fun loadProfileImage(profileImageUri: String) {
-        if(profileImageUri!="empty") {
+        if (profileImageUri != "empty") {
             FirebaseStorage.getInstance().reference.child("image/$profileImageUri").downloadUrl.addOnSuccessListener {
                 Log.d("프로필사진 로드", it.toString())
-                var profileImage = binding.imageViewMyProfileProfileImg
+                val profileImage = binding.imageViewMyProfileProfileImg
+                Log.d("로그", "MyProfileActivity -loadProfileImage() called / v프로필사진 로드: $it")
                 Glide.with(applicationContext).load(it).circleCrop().into(profileImage)
             }.addOnFailureListener {
-                Log.d("프로필사진 로드", "프로필사진없음")
+                Log.d("로그", "프로필사진없음")
             }
-        }
-        else{
-            Log.d("프로필 사진 로드","사진없음")
+        } else {
+            Log.d("로그", "사진없음")
         }
     }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode == Activity.RESULT_OK) {
-            db.callUserData(currentUid, object : Callback<UserData> {
-                override fun onCallback(data: UserData) {
-                    if(data != null){
-                        binding.textViewMyProfileName.text = data.userName
-                        binding.textViewMyProfileEmail.text = data.id
-                        binding.textViewMyProfileStudentIdValue.text = data.student_id
-                        binding.textViewMyProfileMajorValue.text = data.major
-                        binding.textViewMyProfileBirthdayValue.text = data.birth
-                        Log.d("data",data.toString())
-                        loadProfileImage(data.userProfileImageUrl)
-                        extraProfileImageUri = data.userProfileImageUrl
-                    }
-                }
-            })
+        Log.d("로그", "MyProfileActivity -onActivityResult() called / first")
+        if (requestCode == 2000) { // 프로필 업데이트
+            if (resultCode == RESULT_OK) {
+                Log.d("로그", "MyProfileActivity -onActivityResult() called // 2000: ${data!!.getStringExtra("imgUrl")!!}")
+                loadProfileImage(data!!.getStringExtra("imgUrl")!!)
+            }
         }
     }
+
     override fun finish() {
         super.finish()
         overridePendingTransition(R.anim.activity_slide_back_in, R.anim.activity_slide_back_out)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-//        return super.onCreateOptionsMenu(menu)
         menuInflater.inflate(R.menu.toolbar_account_edit, menu)
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        Log.d("로그", "MyProfileActivity -onOptionsItemSelected() called")
         when (item.itemId) {
             R.id.menu_edit_account -> { // 프로필 수정 메뉴 누르면 EditProfileActivity로 이동
                 Intent(this, EditProfileActivity::class.java).also {
-                    intent.putExtra("profileImage",extraProfileImageUri)
-                    startActivity(it)
-                    overridePendingTransition(R.anim.activity_slide_in, R.anim.activity_slide_out)
-                    finish()
+                    startActivityForResult(it, 2000)
                 }
+                overridePendingTransition(R.anim.activity_slide_in, R.anim.activity_slide_out)
             }
         }
         return true

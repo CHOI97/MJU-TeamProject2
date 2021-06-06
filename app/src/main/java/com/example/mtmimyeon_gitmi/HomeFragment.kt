@@ -19,9 +19,13 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.example.mtmimyeon_gitmi.databinding.*
+import com.example.mtmimyeon_gitmi.db.Callback
+import com.example.mtmimyeon_gitmi.db.DatabaseManager
+import com.example.mtmimyeon_gitmi.db.UserData
 import com.example.mtmimyeon_gitmi.mbti.MbtiTestStartFragment
 import com.example.mtmimyeon_gitmi.util.SharedPrefManager
 import com.google.android.material.snackbar.Snackbar
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,6 +38,7 @@ import kotlin.math.abs
 class HomeFragment : Fragment(), MjuSiteClickedInterface {
     private var _binding: FragmentHomeBinding? = null
     private val binding get() = _binding!!
+    private var isFirstStart = true // 처음 시작할 때만 db에서 유저 데이터 get
     private lateinit var mTimer: Timer
     private lateinit var customTimerTask: CustomTimerTask
     private var isFromSchoolToDestination = true // 학교 -> 도착지 || 도착지 학교
@@ -54,7 +59,7 @@ class HomeFragment : Fragment(), MjuSiteClickedInterface {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         _binding = FragmentHomeBinding.inflate(inflater, container, false)
         init()
@@ -63,6 +68,21 @@ class HomeFragment : Fragment(), MjuSiteClickedInterface {
     }
 
     private fun init() {
+
+        // db에서 유저 데이터 가져와서 SharedPrefernces 저장
+        if (this.isFirstStart) {
+            val myUid = FirebaseAuth.getInstance().currentUser.uid
+            val db = DatabaseManager()
+            Log.d("로그", "HomeFragment -init() called // DB에서 처음으로 데이터 get")
+            this.isFirstStart = false
+
+            db.callUserData(myUid, object : Callback<UserData> {
+                override fun onCallback(data: UserData) {
+                    Log.d("로그", "HomeFragment -onCallback() called / data = $data")
+                    SharedPrefManager.setUserData(data)
+                }
+            })
+        }
 
         // main banner init
         val myMbtiResult = SharedPrefManager.getMyMbtiType()
@@ -107,7 +127,8 @@ class HomeFragment : Fragment(), MjuSiteClickedInterface {
             )
             // MBTI 배경 설정
             binding.constraintLayoutFragmentHomeMyMbtiContainer.background =
-                ContextCompat.getDrawable(requireContext(), bannerColorList[mbtiIndex[myMbtiResult]!! % bannerColorList.size])
+                ContextCompat.getDrawable(requireContext(),
+                    bannerColorList[mbtiIndex[myMbtiResult]!! % bannerColorList.size])
             // MBTI Title 설정
             binding.textViewFragmentHomeMbtiTypeTitle.text =
                 requireContext().resources.getStringArray(R.array.main_banner_mbti_type_title)[mbtiIndex[myMbtiResult]!!]
@@ -210,7 +231,6 @@ class HomeFragment : Fragment(), MjuSiteClickedInterface {
         accessRoadExpectationTime =
             requireContext().resources.getStringArray(R.array.access_road_expectation_time) // 진입로행 셔틀버스 진입로 도착 예정 시간
 
-
         // 추가 정보 버튼 클릭 시, 버스 노선 리사이킄러뷰 보이기
         binding.imageViewFragmentHomeInfo.setOnClickListener {
             if (binding.recyclerViewFragmentHomeAccessRoadStopoverList.visibility == View.GONE) {
@@ -310,7 +330,6 @@ class HomeFragment : Fragment(), MjuSiteClickedInterface {
                             accessRoadBusTime[accessRoadIndex]
                     }
                 }
-
             }
         }
     }
@@ -363,7 +382,18 @@ class HomeFragment : Fragment(), MjuSiteClickedInterface {
             }
 
             "학교홈" -> url = "https://www.mju.ac.kr/mjukr/index.do"
-            "학과홈" -> url = "https://cs.mju.ac.kr"
+            "학과홈" -> {
+                val major = SharedPrefManager.getUserData().major
+                var majorIndex = -1
+                val majorList = requireContext().resources.getStringArray(R.array.major)
+                for (i in majorList.indices) { // index get
+                    if (majorList[i] == major) {
+                        majorIndex = i
+                        break
+                    }
+                }
+                url = requireContext().resources.getStringArray(R.array.major_site)[majorIndex]
+            }
             "library" -> url = "https://lib.mju.ac.kr/index.ax"
             "eclass" -> url = "https://eclass.mju.ac.kr/user/index.action"
             "lms" -> url = "https://lms.mju.ac.kr/ilos/main/main_form.acl"
@@ -373,7 +403,7 @@ class HomeFragment : Fragment(), MjuSiteClickedInterface {
                 "https://ucheck.mju.ac.kr/;jsessionid=F35A5F3F48644210CEB08183C2E8D492#"
             "기숙사" -> url = "https://jw4.mju.ac.kr/user/dorm/index.action"
             "문진표" -> url = "http://www.mjuqr.kr/view/4b46ea5151336b2f7668b67551b1a511"
-            "수강신청" -> url = "http://http://class.mju.ac.kr/"
+            "수강신청" -> url = "http://class.mju.ac.kr/"
             else -> url = "https://www.mju.ac.kr/mjukr/index.do"
         }
         Intent(Intent.ACTION_VIEW, Uri.parse(url)).also {
@@ -454,7 +484,7 @@ data class ItemMjuSite(val mjuImage: Int, val mjuText: String)
 // 리사이클러뷰 어댑터
 class MjuSiteRecyclerAdapter(
     private val itemMjuSiteList: ArrayList<ItemMjuSite>,
-    private val mjuSiteClickedInterface: MjuSiteClickedInterface
+    private val mjuSiteClickedInterface: MjuSiteClickedInterface,
 ) : RecyclerView.Adapter<MjuSiteViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MjuSiteViewHolder {
@@ -474,7 +504,7 @@ class MjuSiteRecyclerAdapter(
 // 리사이클러뷰 뷰홀더
 class MjuSiteViewHolder(
     private val item: ItemMjuSiteBinding,
-    private val mjuSiteClickedInterface: MjuSiteClickedInterface
+    private val mjuSiteClickedInterface: MjuSiteClickedInterface,
 ) : RecyclerView.ViewHolder(item.root) {
 
     init {
